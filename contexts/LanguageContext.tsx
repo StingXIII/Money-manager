@@ -33,6 +33,18 @@ const translations: Translations = {
     dash_upcoming: "Upcoming Payments",
     dash_no_data: "No expense data for this month.",
     dash_no_upcoming: "No upcoming payments.",
+    dash_health_check: "Financial Health Check",
+    
+    // KPIs
+    kpi_burn_rate: "Burn Rate",
+    kpi_burn_rate_desc: "Avg. spending / day",
+    kpi_runway: "Runway",
+    kpi_runway_desc: "Survival time if income stops",
+    kpi_runway_days: "days",
+    kpi_savings_rate: "Savings Rate",
+    kpi_savings_rate_desc: "Target > 20%",
+    kpi_dti: "Debt-to-Income (DTI)",
+    kpi_dti_desc: "Debt payments / Income",
 
     // Transactions
     trans_title: "Transactions",
@@ -214,6 +226,18 @@ const translations: Translations = {
     dash_upcoming: "Sắp đến hạn",
     dash_no_data: "Không có dữ liệu chi tiêu tháng này.",
     dash_no_upcoming: "Không có khoản nào sắp đến hạn.",
+    dash_health_check: "Chỉ số Sức khỏe Tài chính",
+
+    // KPIs
+    kpi_burn_rate: "Tốc độ đốt tiền",
+    kpi_burn_rate_desc: "Trung bình chi tiêu / ngày",
+    kpi_runway: "Thời gian sống sót",
+    kpi_runway_desc: "Nếu mất hết nguồn thu",
+    kpi_runway_days: "ngày",
+    kpi_savings_rate: "Tỷ lệ tiết kiệm",
+    kpi_savings_rate_desc: "Mục tiêu > 20%",
+    kpi_dti: "Tỷ lệ Nợ/Thu nhập (DTI)",
+    kpi_dti_desc: "Tổng trả nợ / Thu nhập",
 
     // Transactions
     trans_title: "Giao dịch",

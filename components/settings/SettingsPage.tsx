@@ -22,12 +22,14 @@ const changelogs: LogEntry[] = [
     version: '1.1.0',
     date: new Date().toLocaleDateString(),
     changes_en: [
+        'Added "Financial Health Check" section on Dashboard with KPIs: Burn Rate, Runway, Savings Rate, DTI.',
         'Added "Fin-Sentinel" AI Advisor powered by Google Gemini for financial auditing and advice.',
-        'Redesigned Mobile Navigation with new bottom drawer menu.',
+        'Redesigned Mobile Navigation with new sidebar drawer menu.',
         'Improved Transactions & Accounts UI for mobile devices.',
         'Added Changelog section in Settings.'
     ],
     changes_vi: [
+        'Thêm mục "Sức khỏe Tài chính" trên Tổng quan với các chỉ số: Tốc độ đốt tiền, Thời gian sống sót, Tỷ lệ tiết kiệm, DTI.',
         'Tích hợp Trợ lý tài chính AI "Fin-Sentinel" (sử dụng Google Gemini) để kiểm toán và tư vấn.',
         'Thiết kế lại menu điều hướng trên mobile dạng ngăn kéo (Drawer).',
         'Tối ưu giao diện Giao dịch & Tài khoản cho điện thoại.',

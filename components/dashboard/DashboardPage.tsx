@@ -15,7 +15,7 @@ import MonthSelector from '../ui/MonthSelector';
 const DashboardPage: React.FC = () => {
     const { user } = useAuth();
     const { theme } = useTheme();
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const { selectedDate } = useDateFilter();
     const [loading, setLoading] = useState(true);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -54,7 +54,7 @@ const DashboardPage: React.FC = () => {
                 const loansSnapshot = await getDocs(loansQuery);
                 const fetchedLoans = await Promise.all(loansSnapshot.docs.map(async (loanDoc) => {
                     const loanData = { id: loanDoc.id, ...loanDoc.data() } as Loan;
-                    const scheduleQuery = query(collection(db, `users/${user.uid}/loans/${loanData.id}/paymentSchedule`), where('isPaid', '==', false));
+                    const scheduleQuery = query(collection(db, `users/${user.uid}/loans/${loanData.id}/paymentSchedule`));
                     const scheduleSnapshot = await getDocs(scheduleQuery);
                     const schedule = scheduleSnapshot.docs.map(doc => ({...doc.data(), id: doc.id } as PaymentSchedule));
                     return { ...loanData, schedule };
@@ -107,6 +107,50 @@ const DashboardPage: React.FC = () => {
             projectedCash,
         };
     }, [transactions, accounts, loans]);
+
+    const kpis = useMemo(() => {
+        const daysInMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0).getDate();
+        const isCurrentMonth = new Date().getMonth() === selectedDate.getMonth() && new Date().getFullYear() === selectedDate.getFullYear();
+        const daysPassed = isCurrentMonth ? new Date().getDate() : daysInMonth;
+
+        // 1. Burn Rate (Spending / Day)
+        const burnRate = dashboardSummary.monthlyExpense / (daysPassed || 1);
+        
+        // 2. Runway (Survival Days)
+        const runway = burnRate > 0 ? dashboardSummary.actualCash / burnRate : 0;
+        
+        // 3. Savings Rate (%)
+        const savingsRate = dashboardSummary.monthlyIncome > 0 
+            ? ((dashboardSummary.monthlyIncome - dashboardSummary.monthlyExpense) / dashboardSummary.monthlyIncome) * 100 
+            : 0;
+
+        // 4. DTI (Debt to Income)
+        // Calculate total monthly debt payments (Loan Schedule Payments + CC Payments made this month)
+        const loanPaymentsThisMonth = loans.reduce((sum, loan) => {
+            const scheduleItem = loan.schedule.find(item => {
+                const d = item.paymentDate.toDate();
+                return d.getMonth() === selectedDate.getMonth() && d.getFullYear() === selectedDate.getFullYear();
+            });
+            return sum + (scheduleItem ? scheduleItem.totalPayment : 0);
+        }, 0);
+
+        const ccPaymentsThisMonth = transactions
+            .filter(t => t.transactionType === 'payment')
+            .reduce((sum, t) => sum + t.amount, 0);
+
+        const totalDebtPayment = loanPaymentsThisMonth + ccPaymentsThisMonth;
+
+        const dti = dashboardSummary.monthlyIncome > 0 
+            ? (totalDebtPayment / dashboardSummary.monthlyIncome) * 100
+            : 0;
+
+        return {
+            burnRate,
+            runway,
+            savingsRate,
+            dti
+        };
+    }, [dashboardSummary, loans, transactions, selectedDate]);
     
     const chartData = useMemo(() => {
         const parentCategories = categories.filter(c => c.parentId === null && c.type === 'expense');
@@ -139,21 +183,17 @@ const DashboardPage: React.FC = () => {
         // Add Debt Repayment slice if there is data
         if (expenseByParentCategory[DEBT_REPAYMENT_ID] > 0) {
             data.push({
-                name: 'Trả nợ (Vay)',
+                name: language === 'vi' ? 'Trả nợ (Vay)' : 'Debt Repayment',
                 value: expenseByParentCategory[DEBT_REPAYMENT_ID]
             });
         }
 
         return data.filter(d => d.value > 0);
 
-    }, [transactions, categories]);
+    }, [transactions, categories, language]);
 
     const reminders = useMemo(() => {
-        const now = new Date(); // Reminders are usually strictly about "Current/Future" status, so we keep `now` for logic or use `selectedDate` if we want to see what WAS due.
-        // For UX, "Upcoming" usually implies real-time upcoming. 
-        // However, if we are looking at a past month, "Upcoming" is weird.
-        // Let's keep reminders strictly relative to Real Time for utility.
-        
+        const now = new Date(); 
         const upcomingReminders: {text: string, date: Date}[] = [];
 
         // Credit card payments
@@ -188,14 +228,15 @@ const DashboardPage: React.FC = () => {
                 paymentDueDate.setDate(paymentDueDate.getDate() + acc.paymentDueDateOffset!);
             }
 
-            upcomingReminders.push({ text: `Payment for ${acc.name}`, date: paymentDueDate });
+            upcomingReminders.push({ text: `Bill: ${acc.name}`, date: paymentDueDate });
         });
 
         // Loan payments
         loans.forEach(loan => {
-            const nextPayment = loan.schedule.sort((a,b) => a.paymentDate.toMillis() - b.paymentDate.toMillis())[0];
+            // Find next unpaid payment
+            const nextPayment = loan.schedule.sort((a,b) => a.paymentDate.toMillis() - b.paymentDate.toMillis()).find(p => !p.isPaid && p.paymentDate.toDate() >= new Date(now.setHours(0,0,0,0)));
             if(nextPayment) {
-                 upcomingReminders.push({ text: `Payment for ${loan.name}`, date: nextPayment.paymentDate.toDate() });
+                 upcomingReminders.push({ text: `Loan: ${loan.name}`, date: nextPayment.paymentDate.toDate() });
             }
         });
         
@@ -239,11 +280,53 @@ const DashboardPage: React.FC = () => {
                     <p className={`text-3xl font-bold ${dashboardSummary.projectedCash >= 0 ? 'text-indigo-700 dark:text-indigo-300' : 'text-pink-700 dark:text-pink-300'}`}>{dashboardSummary.projectedCash.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}</p>
                 </Card>
             </div>
+            
+            {/* Financial Health Check KPIs */}
+            <div>
+                <h2 className="text-xl font-bold text-gray-700 dark:text-gray-200 mb-4">{t('dash_health_check')}</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Burn Rate */}
+                    <Card className="bg-gray-50 dark:bg-gray-800 border-t-4 border-gray-500">
+                         <div className="text-gray-500 dark:text-gray-400 text-sm font-semibold">{t('kpi_burn_rate')}</div>
+                         <div className="text-2xl font-bold text-gray-800 dark:text-white my-1">
+                             {kpis.burnRate.toLocaleString('vi-VN')} <span className="text-sm font-normal">đ</span>
+                         </div>
+                         <div className="text-xs text-gray-500 dark:text-gray-400">{t('kpi_burn_rate_desc')}</div>
+                    </Card>
+
+                    {/* Runway */}
+                    <Card className={`bg-gray-50 dark:bg-gray-800 border-t-4 ${kpis.runway > 90 ? 'border-green-500' : kpis.runway > 30 ? 'border-yellow-500' : 'border-red-500'}`}>
+                         <div className="text-gray-500 dark:text-gray-400 text-sm font-semibold">{t('kpi_runway')}</div>
+                         <div className={`text-2xl font-bold my-1 ${kpis.runway > 90 ? 'text-green-600' : kpis.runway > 30 ? 'text-yellow-600' : 'text-red-600'}`}>
+                             {Math.round(kpis.runway).toLocaleString('vi-VN')} <span className="text-sm font-normal text-gray-500 dark:text-gray-400">{t('kpi_runway_days')}</span>
+                         </div>
+                         <div className="text-xs text-gray-500 dark:text-gray-400">{t('kpi_runway_desc')}</div>
+                    </Card>
+
+                    {/* Savings Rate */}
+                    <Card className={`bg-gray-50 dark:bg-gray-800 border-t-4 ${kpis.savingsRate > 20 ? 'border-green-500' : kpis.savingsRate > 0 ? 'border-yellow-500' : 'border-red-500'}`}>
+                         <div className="text-gray-500 dark:text-gray-400 text-sm font-semibold">{t('kpi_savings_rate')}</div>
+                         <div className={`text-2xl font-bold my-1 ${kpis.savingsRate > 20 ? 'text-green-600' : kpis.savingsRate > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                             {kpis.savingsRate.toFixed(1)}%
+                         </div>
+                         <div className="text-xs text-gray-500 dark:text-gray-400">{t('kpi_savings_rate_desc')}</div>
+                    </Card>
+
+                    {/* DTI */}
+                    <Card className={`bg-gray-50 dark:bg-gray-800 border-t-4 ${kpis.dti < 30 ? 'border-green-500' : kpis.dti < 40 ? 'border-yellow-500' : 'border-red-500'}`}>
+                         <div className="text-gray-500 dark:text-gray-400 text-sm font-semibold">{t('kpi_dti')}</div>
+                         <div className={`text-2xl font-bold my-1 ${kpis.dti < 30 ? 'text-green-600' : kpis.dti < 40 ? 'text-yellow-600' : 'text-red-600'}`}>
+                             {kpis.dti.toFixed(1)}%
+                         </div>
+                         <div className="text-xs text-gray-500 dark:text-gray-400">{t('kpi_dti_desc')}</div>
+                    </Card>
+                </div>
+            </div>
 
             {/* Charts and Reminders */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <Card className="lg:col-span-2">
-                    <h2 className="text-xl font-semibold mb-4 text-gray-700 dark:text-gray-200">{t('dash_expense_breakdown')} ({selectedDate.toLocaleDateString('en-US', {month: 'short'})})</h2>
+                    <h2 className="text-xl font-semibold mb-4 text-gray-700 dark:text-gray-200">{t('dash_expense_breakdown')} ({selectedDate.toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US', {month: 'short'})})</h2>
                     {chartData.length > 0 ? (
                         <ResponsiveContainer width="100%" height={300}>
                             <PieChart>
