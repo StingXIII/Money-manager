@@ -1,0 +1,5 @@
+{
+  "name": "Money Manager",
+  "description": "A web application to replace personal finance Excel files, offering a unified dashboard for expenses, loans, accounts, and categories with real-time data synchronization and automation, built on Firebase.",
+  "requestFramePermissions": []
+}
